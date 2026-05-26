@@ -19,9 +19,16 @@ Mở [http://localhost:3000](http://localhost:3000) — chọn **Staff** hoặc 
 | Route | Màn hình |
 |-------|----------|
 | `/staff/login` | Đăng nhập PIN |
-| `/staff/pos` | POS bán hàng |
-| `/staff/payment` | Thanh toán + gán pager |
-| `/staff/orders` | Quản lý đơn |
+| `/staff/pos` | POS — chọn món |
+| `/staff/pos/modifier` | Tùy chọn món (size, đá, đường, topping) |
+| `/staff/cart` | Giỏ hàng & tóm tắt đơn |
+| `/staff/payment` | Thanh toán + pager |
+| `/staff/payment/discount` | Giảm giá / KM |
+| `/staff/payment/split` | Thanh toán chia |
+| `/staff/orders` | Hàng đợi đơn |
+| `/staff/orders/[id]` | Chi tiết đơn |
+| `/staff/orders/[id]/refund` | Hoàn tiền / hủy |
+| `/staff/offline` | Chế độ offline |
 | `/staff/kitchen` | KDS |
 | `/staff/pickup` | Pickup TV (fullscreen) |
 | `/staff/pager` | Quản lý pager |

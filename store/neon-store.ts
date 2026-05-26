@@ -1,9 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { CartItem, OrderStatus, PagerDevice, PagerState } from "@/lib/types";
+import { modifiersKey } from "@/lib/modifiers";
+import type {
+  CartDiscount,
+  CartItem,
+  OrderStatus,
+  PagerDevice,
+  PagerState,
+  PendingSyncItem,
+  RefundType,
+  SplitPaymentLine,
+} from "@/lib/types";
 import {
   buildInitialState,
   formatTime,
@@ -31,6 +41,27 @@ function logActivity(message: string) {
   }));
 }
 
+function migrateCartItem(c: CartItem & { productId: string }): CartItem {
+  if (c.lineId) return c;
+  return {
+    lineId: `${c.productId}-${Date.now()}`,
+    productId: c.productId,
+    name: c.name,
+    basePrice: (c as CartItem).basePrice ?? c.price,
+    price: c.price,
+    quantity: c.quantity,
+    modifiers: c.modifiers,
+    modifierLabels: c.modifierLabels,
+  };
+}
+
+function discountAmount(subtotal: number, discount: CartDiscount | null): number {
+  if (!discount || discount.value <= 0) return 0;
+  if (discount.type === "percent")
+    return Math.round((subtotal * Math.min(100, discount.value)) / 100);
+  return Math.min(subtotal, discount.value);
+}
+
 interface NeonState {
   products: Product[];
   orders: OrderRecord[];
@@ -45,6 +76,18 @@ interface NeonState {
   activities: Activity[];
   settings: AppSettings;
   cart: CartItem[];
+  cartDiscount: CartDiscount | null;
+  splitPayments: SplitPaymentLine[];
+  customerName: string;
+  isOffline: boolean;
+  pendingSync: PendingSyncItem[];
+  heldOrders: {
+    id: string;
+    savedAt: string;
+    cart: CartItem[];
+    discount: CartDiscount | null;
+    customerName: string;
+  }[];
   selectedPager: string | null;
   session: { staffId: string | null; staffName: string | null };
   orderCounter: number;
@@ -52,25 +95,41 @@ interface NeonState {
 
   login: (staffId: string, staffName: string) => void;
   logout: () => void;
-  addToCart: (item: Omit<CartItem, "quantity">) => void;
-  removeFromCart: (productId: string) => void;
-  updateCartQty: (productId: string, quantity: number) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
+  addToCart: (item: Omit<CartItem, "lineId" | "quantity"> & { quantity?: number }) => void;
+  removeFromCart: (lineId: string) => void;
+  updateQuantity: (lineId: string, quantity: number) => void;
   clearCart: () => void;
+  setCustomerName: (name: string) => void;
+  setCartDiscount: (discount: CartDiscount | null) => void;
+  setSplitPayments: (lines: SplitPaymentLine[]) => void;
+  addSplitLine: (line: Omit<SplitPaymentLine, "id">) => void;
+  updateSplitLine: (id: string, partial: Partial<SplitPaymentLine>) => void;
+  removeSplitLine: (id: string) => void;
+  clearSplitPayments: () => void;
+  saveHeldOrder: () => string;
+  loadHeldOrder: (id: string) => void;
   setSelectedPager: (id: string | null) => void;
   setPager: (id: string | null) => void;
   cartSubtotal: () => number;
   subtotal: () => number;
+  cartDiscountAmount: () => number;
+  cartTotal: () => number;
   suggestPager: () => string | null;
   confirmPayment: (params: {
     method: string;
     amountGiven?: number;
     customerName?: string;
+    splitLines?: { method: string; amount: number }[];
   }) => Promise<{ ok: boolean; error?: string; orderId?: string }>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  refundOrder: (orderId: string) => void;
+  refundOrder: (
+    orderId: string,
+    options?: { type?: RefundType; lineIds?: string[]; reason?: string },
+  ) => void;
   resendToKitchen: (orderId: string) => void;
   markKitchenDone: (orderId: string) => void;
+  setOffline: (offline: boolean) => void;
+  syncNow: () => Promise<{ synced: number }>;
   ringPager: (physicalId: string) => void;
   releasePager: (physicalId: string) => void;
   testPager: (physicalId: string) => void;
@@ -78,19 +137,6 @@ interface NeonState {
   addCustomerPoints: (customerId: string, points: number) => void;
   togglePromotion: (id: string) => void;
   updateSettings: (partial: Partial<AppSettings>) => void;
-  getPickupNumbers: () => { ready: string[]; almost: string[]; preparing: string[] };
-  getAlerts: () => {
-    id: string;
-    title: string;
-    message: string;
-    severity: "warning" | "critical";
-  }[];
-  getTodayStats: () => {
-    revenue: number;
-    orders: number;
-    completed: number;
-    inProgress: number;
-  };
   resetDemo: () => void;
 }
 
@@ -121,71 +167,140 @@ export const useNeonStore = create<NeonState>()(
       logout: () => set({ session: { staffId: null, staffName: null } }),
 
       addToCart: (item) => {
+        const key = item.modifiers ? modifiersKey(item.modifiers) : "default";
         set((s) => {
-          const ex = s.cart.find((c) => c.productId === item.productId);
+          const ex = s.cart.find(
+            (c) =>
+              c.productId === item.productId &&
+              (c.modifiers ? modifiersKey(c.modifiers) : "default") === key,
+          );
           if (ex) {
             return {
               cart: s.cart.map((c) =>
-                c.productId === item.productId
-                  ? { ...c, quantity: c.quantity + 1 }
+                c.lineId === ex.lineId
+                  ? { ...c, quantity: c.quantity + (item.quantity ?? 1) }
                   : c,
               ),
             };
           }
-          return { cart: [...s.cart, { ...item, quantity: 1 }] };
+          return {
+            cart: [
+              ...s.cart,
+              { ...item, lineId: `${item.productId}-${Date.now()}`, quantity: item.quantity ?? 1 },
+            ],
+          };
         });
       },
 
-      removeFromCart: (productId) =>
-        set((s) => ({ cart: s.cart.filter((c) => c.productId !== productId) })),
+      removeFromCart: (lineId) =>
+        set((s) => ({ cart: s.cart.filter((c) => c.lineId !== lineId) })),
 
-      updateCartQty: (productId, quantity) => {
+      updateQuantity: (lineId, quantity) => {
         if (quantity <= 0) {
-          get().removeFromCart(productId);
+          get().removeFromCart(lineId);
           return;
         }
         set((s) => ({
-          cart: s.cart.map((c) =>
-            c.productId === productId ? { ...c, quantity } : c,
-          ),
+          cart: s.cart.map((c) => (c.lineId === lineId ? { ...c, quantity } : c)),
         }));
       },
 
       clearCart: () => {
         const ready = get().pagers.find((p) => p.state === "ready");
-        set({ cart: [], selectedPager: ready?.physicalId ?? null });
+        set({
+          cart: [],
+          cartDiscount: null,
+          splitPayments: [],
+          selectedPager: ready?.physicalId ?? null,
+        });
+      },
+
+      setCustomerName: (name) => set({ customerName: name }),
+      setCartDiscount: (discount) => set({ cartDiscount: discount }),
+      setSplitPayments: (lines) => set({ splitPayments: lines }),
+      addSplitLine: (line) =>
+        set((s) => ({
+          splitPayments: [
+            ...s.splitPayments,
+            { ...line, id: `sp-${Date.now()}` },
+          ],
+        })),
+      updateSplitLine: (id, partial) =>
+        set((s) => ({
+          splitPayments: s.splitPayments.map((l) =>
+            l.id === id ? { ...l, ...partial } : l,
+          ),
+        })),
+      removeSplitLine: (id) =>
+        set((s) => ({ splitPayments: s.splitPayments.filter((l) => l.id !== id) })),
+      clearSplitPayments: () => set({ splitPayments: [] }),
+
+      saveHeldOrder: () => {
+        const id = `held-${Date.now()}`;
+        const cart = get().cart;
+        if (!cart.length) return id;
+        set((s) => ({
+          heldOrders: [
+            {
+              id,
+              savedAt: formatTime(Date.now()),
+              cart: [...cart],
+              discount: s.cartDiscount,
+              customerName: s.customerName,
+            },
+            ...s.heldOrders,
+          ],
+          cart: [],
+          cartDiscount: null,
+        }));
+        return id;
+      },
+
+      loadHeldOrder: (id) => {
+        const held = get().heldOrders.find((h) => h.id === id);
+        if (!held) return;
+        set((s) => ({
+          cart: held.cart,
+          cartDiscount: held.discount,
+          customerName: held.customerName,
+          heldOrders: s.heldOrders.filter((h) => h.id !== id),
+        }));
       },
 
       setSelectedPager: (id) => set({ selectedPager: id }),
       setPager: (id) => set({ selectedPager: id }),
 
-      cartSubtotal: () =>
-        get().cart.reduce((sum, i) => sum + i.price * i.quantity, 0),
-      updateQuantity: (productId, quantity) => get().updateCartQty(productId, quantity),
+      cartSubtotal: () => get().cart.reduce((s, i) => s + i.price * i.quantity, 0),
       subtotal: () => get().cartSubtotal(),
+      cartDiscountAmount: () => discountAmount(get().cartSubtotal(), get().cartDiscount),
+      cartTotal: () => get().cartSubtotal() - get().cartDiscountAmount(),
 
       suggestPager: () => get().pagers.find((x) => x.state === "ready")?.physicalId ?? null,
 
-      confirmPayment: async ({ method, amountGiven, customerName }) => {
+      confirmPayment: async ({ method, amountGiven, customerName, splitLines }) => {
         const cart = get().cart;
-        if (cart.length === 0) return { ok: false, error: "Giỏ hàng trống" };
+        if (!cart.length) return { ok: false, error: "Giỏ hàng trống" };
 
-        const total = get().cartSubtotal();
-        if (method === "cash" && (amountGiven ?? 0) < total) {
+        const total = get().cartTotal();
+        const isSplit = method === "split" || (splitLines && splitLines.length > 0);
+
+        if (isSplit && splitLines) {
+          if (splitLines.reduce((s, l) => s + l.amount, 0) < total)
+            return { ok: false, error: "Tổng thanh toán chia chưa đủ" };
+        } else if (method === "cash" && (amountGiven ?? 0) < total) {
           return { ok: false, error: "Số tiền khách đưa chưa đủ" };
         }
 
-        if (["qr", "card", "ewallet"].includes(method)) {
+        if (["qr", "card", "ewallet", "transfer"].includes(method) && !isSplit) {
           set({ paymentProcessing: true });
           await new Promise((r) => setTimeout(r, 1200));
           set({ paymentProcessing: false });
         }
 
         let pagerId = get().selectedPager ?? get().suggestPager();
-        const pagers = get().pagers;
-        let pager = pagers.find((p) => p.physicalId === pagerId);
+        let pager = get().pagers.find((p) => p.physicalId === pagerId);
         if (!pager || pager.state !== "ready") {
-          pager = pagers.find((p) => p.state === "ready");
+          pager = get().pagers.find((p) => p.state === "ready");
           if (!pager) return { ok: false, error: "Không còn pager trống" };
           pagerId = pager.physicalId;
         }
@@ -193,20 +308,37 @@ export const useNeonStore = create<NeonState>()(
         const orderId = String(get().orderCounter);
         const now = Date.now();
         const time = formatTime(now);
+        const paymentLabel = isSplit ? `Chia ${splitLines!.length} PT` : method;
+        const customer =
+          customerName?.trim() || get().customerName.trim() || "Walk-in";
+
+        const lineDetails = cart.map((c) => ({
+          lineId: c.lineId,
+          name: c.name,
+          quantity: c.quantity,
+          unitPrice: c.price,
+          modifierLabels: c.modifierLabels,
+        }));
 
         const order: OrderRecord = {
           id: orderId,
           time,
           createdAt: now,
-          customer: customerName?.trim() || "Walk-in",
-          items: cart.map((c) => `${c.name} x${c.quantity}`),
+          customer,
+          items: cart.map((c) => {
+            const mods = c.modifierLabels?.length ? ` (${c.modifierLabels.join(", ")})` : "";
+            return `${c.name}${mods} x${c.quantity}`;
+          }),
+          lineDetails,
           total,
           status: "preparing",
           pagerId: pagerId!,
-          paymentMethod: method,
+          paymentMethod: paymentLabel,
+          payments: isSplit ? splitLines : [{ method: paymentLabel, amount: total }],
+          discount: get().cartDiscount ?? undefined,
           timer: "00:00",
           timeline: [
-            { time, message: `Thanh toán (${method}) thành công` },
+            { time, message: `Thanh toán (${paymentLabel})` },
             { time, message: `Gán pager #${pagerId}` },
             { time, message: "Gửi xuống bếp" },
           ],
@@ -216,16 +348,30 @@ export const useNeonStore = create<NeonState>()(
           orderCounter: s.orderCounter + 1,
           orders: [order, ...s.orders],
           cart: [],
+          cartDiscount: null,
+          splitPayments: [],
+          customerName: "",
           pagers: s.pagers.map((p) =>
-            p.physicalId === pagerId
-              ? { ...p, state: "in_use" as PagerState, orderId }
-              : p,
+            p.physicalId === pagerId ? { ...p, state: "in_use" as PagerState, orderId } : p,
           ),
         }));
 
-        logActivity(
-          `Đơn #${orderId} · ${total.toLocaleString("vi-VN")}đ · Pager #${pagerId}`,
-        );
+        if (get().isOffline) {
+          set((s) => ({
+            pendingSync: [
+              {
+                id: `ps-${Date.now()}`,
+                type: "order",
+                description: `Đơn #${orderId}`,
+                status: "pending",
+                time: formatTime(Date.now()),
+              },
+              ...s.pendingSync,
+            ],
+          }));
+        }
+
+        logActivity(`Đơn #${orderId} · ${total.toLocaleString("vi-VN")}đ`);
         return { ok: true, orderId };
       },
 
@@ -238,10 +384,7 @@ export const useNeonStore = create<NeonState>()(
                   status,
                   timeline: [
                     ...o.timeline,
-                    {
-                      time: formatTime(Date.now()),
-                      message: `Cập nhật: ${status}`,
-                    },
+                    { time: formatTime(Date.now()), message: `Cập nhật: ${status}` },
                   ],
                 }
               : o,
@@ -253,9 +396,38 @@ export const useNeonStore = create<NeonState>()(
         }
       },
 
-      refundOrder: (orderId) => {
+      refundOrder: (orderId, options) => {
+        const type = options?.type ?? "full";
+        if (type === "partial" && options?.lineIds?.length) {
+          set((s) => ({
+            orders: s.orders.map((o) => {
+              if (o.id !== orderId) return o;
+              const lineDetails = o.lineDetails?.map((l) =>
+                options.lineIds!.includes(l.lineId) ? { ...l, refunded: true } : l,
+              );
+              const refundTotal =
+                lineDetails
+                  ?.filter((l) => l.refunded)
+                  .reduce((sum, l) => sum + l.unitPrice * l.quantity, 0) ?? 0;
+              return {
+                ...o,
+                lineDetails,
+                total: Math.max(0, o.total - refundTotal),
+                timeline: [
+                  ...o.timeline,
+                  {
+                    time: formatTime(Date.now()),
+                    message: `Hoàn một phần · ${options.reason ?? ""}`,
+                  },
+                ],
+              };
+            }),
+          }));
+          return;
+        }
         get().updateOrderStatus(orderId, "cancelled");
-        logActivity(`Hoàn tiền đơn #${orderId}`);
+        const order = get().orders.find((o) => o.id === orderId);
+        if (order?.pagerId) get().releasePager(order.pagerId);
       },
 
       resendToKitchen: (orderId) => {
@@ -289,8 +461,7 @@ export const useNeonStore = create<NeonState>()(
                     ...o.timeline,
                     {
                       time: formatTime(Date.now()),
-                      message:
-                        next === "ready" ? "Sẵn sàng — đã rung pager" : "Cập nhật bếp",
+                      message: next === "ready" ? "Sẵn sàng" : "Cập nhật bếp",
                     },
                   ],
                 }
@@ -298,6 +469,24 @@ export const useNeonStore = create<NeonState>()(
           ),
         }));
         if (next === "ready" && order.pagerId) get().ringPager(order.pagerId);
+      },
+
+      setOffline: (offline) => set({ isOffline: offline }),
+
+      syncNow: async () => {
+        await new Promise((r) => setTimeout(r, 1200));
+        let synced = 0;
+        set((s) => ({
+          pendingSync: s.pendingSync.map((p) => {
+            if (p.status === "pending") {
+              synced++;
+              return { ...p, status: "synced" as const };
+            }
+            return p;
+          }),
+          isOffline: false,
+        }));
+        return { synced };
       },
 
       ringPager: (physicalId) => {
@@ -330,7 +519,7 @@ export const useNeonStore = create<NeonState>()(
       testPager: (physicalId) => get().ringPager(physicalId),
 
       adjustInventory: (id, delta, note) => {
-        const staff = get().session.staffName ?? "Quản lý";
+        const staff = get().session.staffName ?? "Staff";
         set((s) => {
           const inventory = s.inventory.map((inv) => {
             if (inv.id !== id) return inv;
@@ -339,17 +528,22 @@ export const useNeonStore = create<NeonState>()(
             return { ...row, status: recalcInventoryStatus(row) };
           });
           const item = inventory.find((i) => i.id === id);
-          const txn: InventoryTxn = {
-            id: String(Date.now()),
-            date: formatTime(Date.now()),
-            type: delta >= 0 ? "import" : "waste",
-            item: item?.name ?? "",
-            quantity: Math.abs(delta),
-            unit: item?.unit ?? "",
-            staff,
-            note,
+          return {
+            inventory,
+            inventoryTxns: [
+              {
+                id: String(Date.now()),
+                date: formatTime(Date.now()),
+                type: delta >= 0 ? "import" : "waste",
+                item: item?.name ?? "",
+                quantity: Math.abs(delta),
+                unit: item?.unit ?? "",
+                staff,
+                note,
+              },
+              ...s.inventoryTxns,
+            ],
           };
-          return { inventory, inventoryTxns: [txn, ...s.inventoryTxns] };
         });
       },
 
@@ -359,7 +553,6 @@ export const useNeonStore = create<NeonState>()(
             c.id === customerId ? { ...c, points: c.points + points } : c,
           ),
         }));
-        logActivity(`Tích ${points} điểm cho khách`);
       },
 
       togglePromotion: (id) => {
@@ -375,87 +568,45 @@ export const useNeonStore = create<NeonState>()(
       updateSettings: (partial) =>
         set((s) => ({ settings: { ...s.settings, ...partial } })),
 
-      getPickupNumbers: () => {
-        const orders = get().orders;
-        const pick = (st: OrderStatus[]) =>
-          orders.filter((o) => st.includes(o.status) && o.pagerId).map((o) => o.pagerId!);
-        return {
-          ready: pick(["ready"]),
-          almost: pick(["almost_ready"]),
-          preparing: pick(["preparing", "queued", "new"]),
-        };
-      },
-
-      getAlerts: () => {
-        const alerts: ReturnType<NeonState["getAlerts"]> = [];
-        get().inventory
-          .filter((i) => i.status !== "good")
-          .forEach((i) => {
-            alerts.push({
-              id: `inv-${i.id}`,
-              title: i.name,
-              message: `Còn ${i.quantity}${i.unit}`,
-              severity: i.status === "critical" ? "critical" : "warning",
-            });
-          });
-        get().pagers
-          .filter((p) => p.battery < 25)
-          .forEach((p) => {
-            alerts.push({
-              id: `pg-${p.id}`,
-              title: `Pager #${p.physicalId}`,
-              message: `Pin ${p.battery}%`,
-              severity: "warning",
-            });
-          });
-        get()
-          .orders.filter(
-            (o) =>
-              Date.now() - o.createdAt > 5 * 60000 &&
-              ["preparing", "almost_ready", "queued"].includes(o.status),
-          )
-          .forEach((o) => {
-            alerts.push({
-              id: `ord-${o.id}`,
-              title: `Đơn #${o.id}`,
-              message: "Vượt SLA 5 phút",
-              severity: "critical",
-            });
-          });
-        return alerts;
-      },
-
-      getTodayStats: () => {
-        const orders = get().orders.filter((o) => o.status !== "cancelled");
-        return {
-          revenue: orders.reduce((s, o) => s + o.total, 0),
-          orders: orders.length,
-          completed: orders.filter((o) => o.status === "completed").length,
-          inProgress: orders.filter((o) =>
-            ["preparing", "almost_ready", "ready", "queued", "new"].includes(o.status),
-          ).length,
-        };
-      },
-
       resetDemo: () => set({ ...buildInitialState(), paymentProcessing: false }),
     }),
-    { name: "neon-coffee-store" },
+    {
+      name: "neon-coffee-store",
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = persisted as Record<string, unknown>;
+        if (version < 2 && Array.isArray(state.cart)) {
+          state.cart = (state.cart as CartItem[]).map((c) => migrateCartItem(c as CartItem));
+          state.cartDiscount = state.cartDiscount ?? null;
+          state.splitPayments = state.splitPayments ?? [];
+          state.customerName = state.customerName ?? "";
+          state.isOffline = state.isOffline ?? false;
+          state.pendingSync = state.pendingSync ?? [];
+          state.heldOrders = state.heldOrders ?? [];
+        }
+        return state as unknown as NeonState;
+      },
+    },
   ),
 );
 
 export function useLiveOrders() {
   const orders = useNeonStore((s) => s.orders);
-  return orders.map((o) => {
-    const elapsed = Date.now() - o.createdAt;
-    const overdue =
-      elapsed > 5 * 60000 &&
-      !["completed", "cancelled", "picked_up"].includes(o.status);
-    return {
-      ...o,
-      timer: orderElapsedMinutes(o.createdAt),
-      status: overdue && o.status === "preparing" ? ("overdue" as OrderStatus) : o.status,
-    };
-  });
+  return useMemo(
+    () =>
+      orders.map((o) => {
+        const overdue =
+          Date.now() - o.createdAt > 5 * 60000 &&
+          !["completed", "cancelled", "picked_up"].includes(o.status);
+        return {
+          ...o,
+          timer: orderElapsedMinutes(o.createdAt),
+          status:
+            overdue && o.status === "preparing" ? ("overdue" as OrderStatus) : o.status,
+        };
+      }),
+    [orders],
+  );
 }
 
 export function useHydration() {

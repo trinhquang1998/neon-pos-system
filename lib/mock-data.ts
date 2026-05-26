@@ -285,12 +285,23 @@ export const managerNav = [
 
 export const staffNav = [
   { href: "/staff/pos", label: "POS", icon: "ShoppingCart" },
-  { href: "/staff/orders", label: "Đơn hàng", icon: "ClipboardList" },
+  { href: "/staff/cart", label: "Giỏ", icon: "ClipboardList" },
+  { href: "/staff/orders", label: "Đơn hàng", icon: "ListOrdered" },
   { href: "/staff/kitchen", label: "Bếp", icon: "ChefHat" },
   { href: "/staff/pickup", label: "Pickup TV", icon: "LayoutDashboard" },
   { href: "/staff/pager", label: "Pager", icon: "Radio" },
   { href: "/staff/inventory", label: "Kho", icon: "Package" },
+  { href: "/staff/offline", label: "Offline", icon: "WifiOff" },
   { href: "/staff/profile", label: "Hồ sơ", icon: "User" },
+] as const;
+
+export const refundReasons = [
+  "Khách yêu cầu",
+  "Sai món / modifier",
+  "Chất lượng không đạt",
+  "Chờ quá lâu",
+  "Thanh toán nhầm",
+  "Khác",
 ] as const;
 
 export const orderStatusLabels: Record<string, string> = {

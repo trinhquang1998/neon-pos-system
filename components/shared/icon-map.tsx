@@ -6,6 +6,8 @@ import {
   Calendar,
   ChefHat,
   ClipboardList,
+  ListOrdered,
+  WifiOff,
   LayoutDashboard,
   Package,
   Radio,
@@ -33,6 +35,8 @@ const icons: Record<string, LucideIcon> = {
   Settings,
   ShoppingCart,
   ClipboardList,
+  ListOrdered,
+  WifiOff,
   User,
   Bell,
 };
