@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-elevated: #fafafa;
+  --border: #e8e8ed;
+  --text: #171717;
+  --text-secondary: #6b7280;
+  --accent-red: #ff3b30;
+  --warning: #ffb020;
+  --success: #3ddc84;
+  --info: #4a90d9;
+  --radius: 14px;
+
+  --manager-bg: #f5f5f7;
+  --manager-surface: #ffffff;
+  --manager-border: #e8e8ed;
+  --manager-text: #1a1a1a;
+  --manager-text-secondary: #6b6b6b;
+}
+
+@theme inline {
+  --color-neon-bg: var(--bg);
+  --color-neon-surface: var(--surface);
+  --color-neon-border: var(--border);
+  --color-neon-text: var(--text);
+  --color-neon-muted: var(--text-secondary);
+  --color-neon-red: var(--accent-red);
+  --color-neon-warning: var(--warning);
+  --color-neon-success: var(--success);
+  --color-neon-info: var(--info);
+  --radius-neon: var(--radius);
+  --font-sans: var(--font-geist-sans);
+}
+
+body {
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+@keyframes pulse-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(74, 144, 217, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(74, 144, 217, 0);
+  }
+}
+
+.animate-pager-ring {
+  animation: pulse-ring 1.5s ease-in-out infinite;
+}
+
+.safe-area-pb {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+@media (max-width: 640px) {
+  .responsive-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
