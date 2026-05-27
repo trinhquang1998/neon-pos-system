@@ -136,6 +136,7 @@ interface NeonState {
   adjustInventory: (id: string, delta: number, note?: string) => void;
   addCustomerPoints: (customerId: string, points: number) => void;
   togglePromotion: (id: string) => void;
+  applyPromotion: (id: string) => number;
   updateSettings: (partial: Partial<AppSettings>) => void;
   resetDemo: () => void;
 }
@@ -563,6 +564,66 @@ export const useNeonStore = create<NeonState>()(
               : p,
           ),
         }));
+      },
+      applyPromotion: (id) => {
+        const promo = get().promotions.find((p) => p.id === id);
+        if (!promo) return 0;
+        const cart = get().cart;
+        if (!cart.length) return 0;
+        let discount = 0;
+
+        // helper: build list of unit prices for a subset of items
+        const pricesFor = (items: typeof cart) => items.flatMap((it) => Array.from({ length: it.quantity }, () => it.price));
+
+        if (promo.type === "percent") {
+          discount = Math.round(get().cartSubtotal() * (Number(promo.value.replace("%", "")) || 0) / 100);
+        } else if (promo.type === "fixed") {
+          discount = Number(promo.value.replace(/[^0-9]/g, "")) || 0;
+        } else if (promo.type === "bogo") {
+          // Determine candidate items via promo.applyTo if provided
+          let candidates = cart;
+          if (promo.applyTo) {
+            if (promo.applyTo.type === "category") {
+              const cats = new Set(promo.applyTo.ids);
+              candidates = cart.filter((c) => {
+                const prod = get().products.find((p) => p.id === c.productId);
+                return prod ? cats.has(prod.category) : false;
+              });
+            } else if (promo.applyTo.type === "products") {
+              const ids = new Set(promo.applyTo.ids);
+              candidates = cart.filter((c) => ids.has(c.productId));
+            }
+          }
+
+          // For buy-2-get-1 semantics: every 3rd item is free within the candidate set
+          const units = pricesFor(candidates).sort((a, b) => a - b);
+          const freeCount = Math.floor(units.length / 3);
+          discount = units.slice(0, freeCount).reduce((s, v) => s + v, 0);
+        } else if (promo.type === "points") {
+          // points don't reduce price directly
+          discount = 0;
+        } else {
+          // combo/other: give one cheapest item free for each full combo set
+          // determine distinct product ids and their quantities
+          const byProduct: Record<string, { qty: number; price: number }> = {};
+          cart.forEach((c) => {
+            byProduct[c.productId] = byProduct[c.productId] || { qty: 0, price: c.price };
+            byProduct[c.productId].qty += c.quantity;
+            byProduct[c.productId].price = Math.min(byProduct[c.productId].price, c.price);
+          });
+          const productIds = Object.keys(byProduct);
+          if (productIds.length >= 2) {
+            // number of full sets is min quantity among distinct products
+            const groups = Math.min(...productIds.map((id) => byProduct[id].qty));
+            const cheapest = Math.min(...productIds.map((id) => byProduct[id].price));
+            discount = groups * cheapest;
+          }
+        }
+
+        if (discount > 0) {
+          set({ cartDiscount: { type: "fixed", name: promo.name, value: discount } });
+        }
+        return discount;
       },
 
       updateSettings: (partial) =>

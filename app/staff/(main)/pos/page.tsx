@@ -8,6 +8,7 @@ import { categories } from "@/lib/mock-data";
 import { getProductImage } from "@/lib/product-images";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useNeonStore } from "@/store/neon-store";
+import { CartLines, CartSummary } from "@/components/staff/cart-panel";
 
 export default function PosPage() {
   const router = useRouter();
@@ -17,7 +18,8 @@ export default function PosPage() {
   const cart = useNeonStore((s) => s.cart);
   const updateQuantity = useNeonStore((s) => s.updateQuantity);
   const removeFromCart = useNeonStore((s) => s.removeFromCart);
-  const subtotal = useNeonStore((s) => s.subtotal);
+  const subtotal = useNeonStore((s) => s.cartSubtotal());
+  const discount = useNeonStore((s) => s.cartDiscountAmount());
   const total = useNeonStore((s) => s.cartTotal());
 
   const filtered = useMemo(() => {
@@ -90,36 +92,23 @@ export default function PosPage() {
           <p className="text-xs text-[var(--text-secondary)]">{cart.length} món</p>
         </div>
         <div className="flex-1 overflow-auto p-3">
-          {cart.length === 0 ? (
-            <p className="py-8 text-center text-sm text-[var(--text-secondary)]">Chưa có món</p>
-          ) : (
-            cart.map((item) => (
-              <div key={item.lineId} className="mb-2 rounded-xl border p-3">
-                <div className="flex justify-between">
-                  <p className="text-sm font-medium">{item.name}</p>
-                  <button type="button" onClick={() => removeFromCart(item.lineId)}><Trash2 className="h-4 w-4" /></button>
-                </div>
-                {item.modifierLabels?.length ? <p className="text-xs text-[var(--text-secondary)]">{item.modifierLabels.join(" · ")}</p> : null}
-                <div className="mt-2 flex items-center justify-between">
-                  <div className="flex gap-2">
-                    <button type="button" className="flex h-9 w-9 items-center justify-center rounded-lg border" onClick={() => updateQuantity(item.lineId, item.quantity - 1)}><Minus className="h-3 w-3" /></button>
-                    <span>{item.quantity}</span>
-                    <button type="button" className="flex h-9 w-9 items-center justify-center rounded-lg border" onClick={() => updateQuantity(item.lineId, item.quantity + 1)}><Plus className="h-3 w-3" /></button>
-                  </div>
-                  <span className="text-sm font-medium">{formatCurrency(item.price * item.quantity)}</span>
-                </div>
-              </div>
-            ))
-          )}
+          <CartLines cart={cart} onUpdateQty={updateQuantity} onRemove={removeFromCart} />
         </div>
         <div className="border-t p-4">
-          <div className="flex justify-between text-sm">
-            <span>Tổng</span>
-            <span className="font-semibold">{formatCurrency(total)}</span>
+          <CartSummary
+            subtotal={subtotal}
+            discount={discount}
+            discountLabel={useNeonStore((s) => s.cartDiscount?.name)}
+            total={total}
+            promoSlot={<div className="mt-2 text-xs">
+              <Link href="/staff/payment/discount" className="text-[var(--info)] underline">Giảm giá nâng cao</Link>
+              </div>}
+          />
+          <div className="mt-4">
+            <Link href={cart.length ? "/staff/payment" : "#"} className={cn("flex w-full min-h-[48px] items-center justify-center rounded-xl bg-black text-sm font-bold text-white", !cart.length && "pointer-events-none opacity-40")}>
+              THANH TOÁN
+            </Link>
           </div>
-          <Link href={cart.length ? "/staff/payment" : "#"} className={cn("mt-4 flex min-h-[48px] items-center justify-center rounded-xl bg-black text-sm font-bold text-white", !cart.length && "pointer-events-none opacity-40")}>
-            THANH TOÁN
-          </Link>
         </div>
       </aside>
     </div>

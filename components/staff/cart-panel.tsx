@@ -53,19 +53,26 @@ export function CartLines({
 export function CartSummary({
   subtotal,
   discount,
+  discountLabel,
   total,
   promoSlot,
 }: {
   subtotal: number;
   discount: number;
+  discountLabel?: string;
   total: number;
   promoSlot?: React.ReactNode;
 }) {
   return (
     <div className="space-y-2 text-sm">
       <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Tạm tính</span><span>{formatCurrency(subtotal)}</span></div>
-      {discount > 0 && <div className="flex justify-between text-green-600"><span>Giảm giá</span><span>-{formatCurrency(discount)}</span></div>}
-      <div className="flex justify-between border-t pt-2 text-base font-bold"><span>Tổng</span><span>{formatCurrency(total)}</span></div>
+      {discount > 0 && (
+        <div className="flex justify-between text-green-600">
+          <span>{discountLabel ?? "Giảm giá"}</span>
+          <span>-{formatCurrency(discount)}</span>
+        </div>
+      )}
+      <div className="flex justify-between border-t pt-2 text-base font-bold"><span>Tổng cộng</span><span>{formatCurrency(total)}</span></div>
       {promoSlot}
     </div>
   );

@@ -24,6 +24,7 @@ export default function PaymentPage() {
   const total = useNeonStore((s) => s.cartTotal());
   const subtotal = useNeonStore((s) => s.cartSubtotal());
   const discount = useNeonStore((s) => s.cartDiscountAmount());
+  const cartDiscount = useNeonStore((s) => s.cartDiscount);
   const suggestPager = useNeonStore((s) => s.suggestPager);
   const confirmPayment = useNeonStore((s) => s.confirmPayment);
   const processing = useNeonStore((s) => s.paymentProcessing);
@@ -83,7 +84,12 @@ export default function PaymentPage() {
           <p className="font-mono text-4xl font-bold">{formatCurrency(total)}</p>
           <dl className="mt-4 space-y-1 text-sm">
             <div className="flex justify-between"><dt>Tạm tính</dt><dd>{formatCurrency(subtotal)}</dd></div>
-            {discount > 0 && <div className="flex justify-between text-green-600"><dt>Giảm</dt><dd>-{formatCurrency(discount)}</dd></div>}
+            {discount > 0 && (
+              <div className="flex justify-between text-green-600">
+                <dt>{cartDiscount?.name ?? "Giảm"}</dt>
+                <dd>-{formatCurrency(discount)}</dd>
+              </div>
+            )}
           </dl>
           {method === "cash" && (
             <div className="mt-4 space-y-2">

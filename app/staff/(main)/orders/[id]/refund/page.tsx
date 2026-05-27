@@ -43,6 +43,12 @@ export default function RefundPage() {
         ))}
       </div>
       <div className="p-4">
+        <div className="rounded-2xl border bg-[var(--surface)] p-4 text-sm">
+          <div className="flex justify-between"><span className="text-[var(--text-secondary)]">Tổng đơn</span><span>{formatCurrency(order.total)}</span></div>
+          {order.discount ? (
+            <div className="flex justify-between text-green-600"><span>{order.discount.name}</span><span>-{formatCurrency(order.discount.type === "percent" ? Math.round((order.lineDetails?.reduce((s, l) => s + l.unitPrice * l.quantity, 0) ?? 0) * Math.min(100, order.discount.value) / 100) : Math.min(order.lineDetails?.reduce((s, l) => s + l.unitPrice * l.quantity, 0) ?? 0, order.discount.value))}</span></div>
+          ) : null}
+        </div>
         {type === "partial" && details.map((l) => (
           <label key={l.lineId} className="mb-2 flex items-center gap-3 rounded-xl border px-3 py-2 text-sm">
             <input type="checkbox" checked={lines.includes(l.lineId)} onChange={() => setLines((p) => p.includes(l.lineId) ? p.filter((x) => x !== l.lineId) : [...p, l.lineId])} />
@@ -54,7 +60,15 @@ export default function RefundPage() {
           {refundReasons.map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
         <p className="mt-4 text-center text-2xl font-bold text-red-600">{formatCurrency(refundTotal)}</p>
-        <button type="button" onClick={() => { refundOrder(id, { type, lineIds: type === "partial" ? lines : undefined, reason }); router.push("/staff/orders"); }} className="mt-4 w-full min-h-[52px] rounded-xl bg-black font-bold text-white">
+        <button
+          type="button"
+          disabled={type === "partial" && lines.length === 0}
+          onClick={() => {
+            refundOrder(id, { type, lineIds: type === "partial" ? lines : undefined, reason });
+            router.push("/staff/orders");
+          }}
+          className="mt-4 w-full min-h-[52px] rounded-xl bg-black font-bold text-white disabled:opacity-50"
+        >
           Xác nhận
         </button>
       </div>

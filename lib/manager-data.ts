@@ -16,13 +16,15 @@ export interface Customer {
 export interface Promotion {
   id: string;
   name: string;
-  type: "percent" | "fixed" | "bogo" | "points";
+  type: "percent" | "fixed" | "bogo" | "points" | "combo";
   value: string;
   status: "active" | "scheduled" | "ended";
   startDate: string;
   endDate: string;
   used: number;
   limit: number;
+  // applyTo allows promotion to target either categories or specific product ids
+  applyTo?: { type: "category" | "products"; ids: string[] };
 }
 
 export interface Voucher {
@@ -117,7 +119,7 @@ export const customers: Customer[] = [
 
 export const promotions: Promotion[] = [
   { id: "1", name: "Giảm 15% cuối tuần", type: "percent", value: "15%", status: "active", startDate: "01/05/2024", endDate: "31/05/2024", used: 124, limit: 500 },
-  { id: "2", name: "Mua 2 tặng 1 đá xay", type: "bogo", value: "BOGO", status: "active", startDate: "10/05/2024", endDate: "20/05/2024", used: 38, limit: 200 },
+  { id: "2", name: "Mua 2 tặng 1 đá xay", type: "bogo", value: "BOGO", status: "active", startDate: "10/05/2024", endDate: "20/05/2024", used: 38, limit: 200, applyTo: { type: "category", ids: ["blended"] } },
   { id: "3", name: "Giảm 20.000đ đơn từ 100k", type: "fixed", value: "20.000đ", status: "scheduled", startDate: "15/05/2024", endDate: "30/05/2024", used: 0, limit: 1000 },
   { id: "4", name: "Tích điểm x2", type: "points", value: "2x", status: "ended", startDate: "01/04/2024", endDate: "30/04/2024", used: 890, limit: 9999 },
 ];
