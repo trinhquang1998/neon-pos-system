@@ -5,6 +5,7 @@ import { useState } from "react";
 import { CartLines, CartSummary } from "@/components/staff/cart-panel";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useNeonStore } from "@/store/neon-store";
+import { comboDiscounts } from "@/lib/mock-data";
 
 function PromoIcon({ type }: { type: string }) {
   if (type === "percent") return (
@@ -158,6 +159,29 @@ export default function CartPage() {
                             <button type="button" onClick={() => window.location.href = '/staff/payment/discount'} className="rounded-lg border px-3 py-1 text-xs">Chi tiết</button>
                           )}
                         </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {comboDiscounts.length > 0 ? (
+                <div className="mt-4 rounded-2xl border bg-[var(--surface)] p-3 text-xs">
+                  <p className="mb-2 font-semibold">Giảm giá Combo</p>
+                  <ul className="space-y-2">
+                    {comboDiscounts.map((c, idx) => (
+                      <li key={idx} className="rounded-xl border bg-white px-3 py-2 flex items-center justify-between">
+                        <div>
+                          <p className="font-semibold"><span className="mr-2 text-[var(--text-secondary)]"><PromoIcon type="percent" /></span>{c.name}</p>
+                          <p className="text-[var(--text-secondary)]">{c.value}% tiết kiệm</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCartDiscount({ type: "percent", name: c.name, value: c.value });
+                            setPromoMessage(`Áp dụng ${c.name} - ${c.value}%`);
+                          }}
+                          className="rounded-lg border px-3 py-1 text-xs font-semibold"
+                        >Áp dụng</button>
                       </li>
                     ))}
                   </ul>

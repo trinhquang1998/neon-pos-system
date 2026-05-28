@@ -23,6 +23,12 @@ export const products: Product[] = [
   { id: "10", name: "Chocolate Frappe", price: 59000, category: "blended" },
   { id: "11", name: "Croissant", price: 35000, category: "cake" },
   { id: "12", name: "Tiramisu", price: 45000, category: "cake" },
+  // Combos
+  { id: "combo1", name: "Combo Sáng (Cà phê + Bánh)", price: 75000, category: "combo", popular: true, image: "https://images.unsplash.com/photo-1511537190424-bbbab87ac5eb?auto=format&fit=crop&w=500&q=80" },
+  { id: "combo2", name: "Combo Trưa (2 Cà phê + Bánh)", price: 120000, category: "combo", popular: true, image: "https://images.unsplash.com/photo-1461023058943-07fcbe16d735?auto=format&fit=crop&w=500&q=80" },
+  { id: "combo3", name: "Combo Chiều (Trà + Bánh + Snack)", price: 95000, category: "combo", image: "https://images.unsplash.com/photo-1556228578-8c89e6adf883?auto=format&fit=crop&w=500&q=80" },
+  { id: "combo4", name: "Combo Đôi (2 Cà phê bất kỳ)", price: 85000, category: "combo", image: "https://images.unsplash.com/photo-1511537190424-bbbab87ac5eb?auto=format&fit=crop&w=500&q=80" },
+  { id: "combo5", name: "Combo Gia Đình (4 Đồ uống + 2 Bánh)", price: 280000, category: "combo", image: "https://images.unsplash.com/photo-1490645935967-10de6ba17061?auto=format&fit=crop&w=500&q=80" },
 ];
 
 export const categories = [
@@ -31,6 +37,7 @@ export const categories = [
   { id: "tea", label: "Trà" },
   { id: "blended", label: "Đá xay" },
   { id: "cake", label: "Bánh" },
+  { id: "combo", label: "Combo" },
   { id: "other", label: "Khác" },
   { id: "favorites", label: "Yêu thích" },
 ];
@@ -302,6 +309,74 @@ export const refundReasons = [
   "Chờ quá lâu",
   "Thanh toán nhầm",
   "Khác",
+] as const;
+
+// Combo details - define what's in each combo
+export const comboDetails = [
+  {
+    comboId: "combo1",
+    name: "Combo Sáng (Cà phê + Bánh)",
+    description: "Chọn 1 cà phê (Espresso, Americano, Cappuccino, Latte) + 1 bánh (Croissant, Tiramisu)",
+    productIds: ["1", "2", "3", "4", "11", "12"],
+    discount: 10,
+    savings: 5000,
+  },
+  {
+    comboId: "combo2",
+    name: "Combo Trưa (2 Cà phê + Bánh)",
+    description: "Chọn 2 cà phê + 1 bánh",
+    productIds: ["1", "2", "3", "4", "7", "8", "11", "12"],
+    discount: 15,
+    savings: 18000,
+  },
+  {
+    comboId: "combo3",
+    name: "Combo Chiều (Trà + Bánh + Snack)",
+    description: "Chọn 1 trà + 1 bánh + 1 đá xay",
+    productIds: ["5", "6", "9", "10", "11", "12"],
+    discount: 12,
+    savings: 11400,
+  },
+  {
+    comboId: "combo4",
+    name: "Combo Đôi (2 Cà phê bất kỳ)",
+    description: "Chọn 2 cà phê bất kỳ (Espresso, Americano, Cappuccino, Latte, Cold Brew, Caramel Macchiato)",
+    productIds: ["1", "2", "3", "4", "7", "8"],
+    discount: 8,
+    savings: 6800,
+  },
+  {
+    comboId: "combo5",
+    name: "Combo Gia Đình (4 Đồ uống + 2 Bánh)",
+    description: "Chọn 4 đồ uống bất kỳ + 2 bánh",
+    productIds: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
+    discount: 20,
+    savings: 56000,
+  },
+] as const;
+
+// Combo discount examples for testing
+export const comboDiscounts = [
+  {
+    type: "combo" as const,
+    name: "Combo Sáng - Tiết kiệm 10%",
+    value: 10,
+  },
+  {
+    type: "combo" as const,
+    name: "Combo Trưa - Tiết kiệm 15%",
+    value: 15,
+  },
+  {
+    type: "combo" as const,
+    name: "Combo Gia Đình - Tiết kiệm 20%",
+    value: 20,
+  },
+  {
+    type: "combo" as const,
+    name: "Combo Đôi - Tiết kiệm 8%",
+    value: 8,
+  },
 ] as const;
 
 export const orderStatusLabels: Record<string, string> = {

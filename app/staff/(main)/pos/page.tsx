@@ -31,6 +31,15 @@ export default function PosPage() {
     });
   }, [products, category, search]);
 
+  // Separate individual products and combos
+  const individualProducts = useMemo(() => {
+    return filtered.filter((p) => p.category !== "combo");
+  }, [filtered]);
+
+  const combos = useMemo(() => {
+    return filtered.filter((p) => p.category === "combo");
+  }, [filtered]);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
       <div className="flex min-h-0 flex-1 flex-col">
@@ -66,24 +75,63 @@ export default function PosPage() {
           </div>
         </header>
         <div className="flex-1 overflow-auto p-3 sm:p-4">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
-            {filtered.map((product) => (
-              <button
-                key={product.id}
-                type="button"
-                onClick={() => router.push(`/staff/pos/modifier?productId=${product.id}`)}
-                className="min-h-[168px] overflow-hidden rounded-[var(--radius)] border bg-[var(--surface)] text-left shadow-sm transition hover:border-neutral-300 active:scale-[0.98]"
-              >
-                <div className="h-24 bg-neutral-100 sm:h-28">
-                  <img src={product.image ?? getProductImage(product.id)} alt="" className="h-full w-full object-cover" loading="lazy" />
-                </div>
-                <div className="p-3">
-                  <p className="line-clamp-2 text-sm font-semibold">{product.name}</p>
-                  <p className="mt-1 text-xs font-bold text-[var(--accent-red)]">{formatCurrency(product.price)}</p>
-                </div>
-              </button>
-            ))}
-          </div>
+          {/* Individual Products Section */}
+          {individualProducts.length > 0 && (
+            <div>
+              <h3 className="mb-3 text-xs uppercase tracking-wide text-[var(--text-secondary)]">Sản phẩm lẻ</h3>
+              <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                {individualProducts.map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => router.push(`/staff/pos/modifier?productId=${product.id}`)}
+                    className="min-h-[168px] overflow-hidden rounded-[var(--radius)] border bg-[var(--surface)] text-left shadow-sm transition hover:border-neutral-300 active:scale-[0.98]"
+                  >
+                    <div className="h-24 bg-neutral-100 sm:h-28">
+                      <img src={product.image ?? getProductImage(product.id)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                    </div>
+                    <div className="p-3">
+                      <p className="line-clamp-2 text-sm font-semibold">{product.name}</p>
+                      <p className="mt-1 text-xs font-bold text-[var(--accent-red)]">{formatCurrency(product.price)}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Combos Section */}
+          {combos.length > 0 && (
+            <div>
+              <h3 className="mb-3 text-xs uppercase tracking-wide text-[var(--text-secondary)]">Combo đặc biệt</h3>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                {combos.map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    onClick={() => router.push(`/staff/pos/modifier?productId=${product.id}`)}
+                    className="relative min-h-[168px] overflow-hidden rounded-[var(--radius)] border bg-[var(--surface)] text-left shadow-sm transition hover:border-neutral-300 active:scale-[0.98]"
+                  >
+                    <div className="h-24 bg-neutral-100 sm:h-28">
+                      <img src={product.image ?? getProductImage(product.id)} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      <div className="absolute right-1 top-1 rounded bg-black px-1.5 py-0.5 text-[9px] font-semibold text-white">COMBO</div>
+                    </div>
+                    <div className="p-3">
+                      <p className="line-clamp-2 text-sm font-semibold">{product.name}</p>
+                      <p className="mt-1 text-xs font-bold text-[var(--accent-red)]">{formatCurrency(product.price)}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {filtered.length === 0 && (
+            <div className="flex items-center justify-center py-12">
+              <p className="text-sm text-[var(--text-secondary)]">Không có sản phẩm nào</p>
+            </div>
+          )}
         </div>
       </div>
       <aside className="hidden w-80 shrink-0 flex-col border-l lg:flex">
