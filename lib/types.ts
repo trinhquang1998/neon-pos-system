@@ -93,6 +93,9 @@ export interface Order {
   paymentMethod?: string;
   payments?: { method: string; amount: number }[];
   discount?: CartDiscount;
+  notes?: string;
+  createdAt?: number;
+  timeline?: { time: string; message: string }[];
 }
 
 export interface PagerDevice {
