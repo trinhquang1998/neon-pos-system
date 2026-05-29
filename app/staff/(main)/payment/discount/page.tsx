@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useNeonStore } from "@/store/neon-store";
+import { comboDetails } from "@/lib/mock-data";
 import type { DiscountType } from "@/lib/types";
 
 const types: { id: DiscountType; label: string; tooltip?: string }[] = [
@@ -75,6 +76,46 @@ export default function DiscountPage() {
     if (!selectedPromotion) return 0;
     if (selectedPromotion.type === "percent") return Math.round((subtotal * Number(selectedPromotion.value.replace("%", ""))) / 100);
     if (selectedPromotion.type === "fixed") return Number(selectedPromotion.value.replace(/[^0-9]/g, "")) || 0;
+    
+    // Combo: compute based on cart items matching combo slots
+    if (selectedPromotion.type === "combo" && selectedPromotion.applyTo?.type === "combo") {
+      const combo = comboDetails.find((c) => c.comboId === selectedPromotion.applyTo!.comboId);
+      if (!combo || !("slots" in combo)) return 0;
+      
+      const cart = useNeonStore.getState().cart;
+      let fullSets = Infinity;
+      let comboCost = 0;
+      
+      // Validate each slot
+      for (const slot of combo.slots) {
+        const slotProductIds = new Set(slot.productIds as any);
+        let slotQty = 0;
+        let slotTotalPrice = 0;
+        let slotItemCount = 0;
+        
+        cart.forEach((c) => {
+          if (slotProductIds.has(c.productId)) {
+            slotQty += c.quantity;
+            slotTotalPrice += c.price * c.quantity;
+            slotItemCount += c.quantity;
+          }
+        });
+        
+        if (slotQty === 0) return 0; // Missing slot
+        
+        const setsFromSlot = Math.floor(slotQty / slot.quantity);
+        fullSets = Math.min(fullSets, setsFromSlot);
+        
+        const avgPrice = slotItemCount > 0 ? Math.round(slotTotalPrice / slotItemCount) : 0;
+        comboCost += avgPrice * slot.quantity;
+      }
+      
+      if (fullSets > 0 && fullSets !== Infinity) {
+        const discountPercent = Number(selectedPromotion.value.replace("%", "")) || (combo.discount || 0);
+        return Math.round((comboCost * fullSets * discountPercent) / 100);
+      }
+    }
+    
     return 0;
   }, [selectedPromotion, subtotal]);
 
@@ -134,7 +175,7 @@ export default function DiscountPage() {
       router.push("/staff/payment");
       return;
     }
-    // For complex promotions (bogo, points, combo), delegate to store to compute
+    // For complex promotions (bogo, combo, points), delegate to store to compute
     const applied = useNeonStore.getState().applyPromotion(selectedPromotion.id);
     if (applied > 0) {
       router.push("/staff/payment");
@@ -197,15 +238,23 @@ export default function DiscountPage() {
             <div>
               <p className="mb-2 text-sm font-semibold">Khuyến mãi có sẵn</p>
               <div className="space-y-2">
-                {promotions.map((promo) => (
-                  <button key={promo.id} type="button" onClick={() => setSelectedPromotionId(promo.id)} className={cn("w-full rounded-xl border px-4 py-3 text-left", selectedPromotionId === promo.id && "border-black bg-black text-white")}> 
-                    <div className="flex items-center justify-between gap-3">
-                      <span>{promo.name}</span>
-                      <span className="text-xs text-[var(--text-secondary)]">{promo.value}</span>
-                    </div>
-                    <p className="mt-1 text-xs text-[var(--text-secondary)]">{promo.status === "active" ? "Đang chạy" : promo.status === "scheduled" ? "Sắp chạy" : "Kết thúc"}</p>
-                  </button>
-                ))}
+                {promotions.map((promo) => {
+                  const comboInfo = promo.type === "combo" && promo.applyTo?.type === "combo"
+                    ? comboDetails.find((c) => c.comboId === promo.applyTo.comboId)
+                    : null;
+                  return (
+                    <button key={promo.id} type="button" onClick={() => setSelectedPromotionId(promo.id)} className={cn("w-full rounded-xl border px-4 py-3 text-left", selectedPromotionId === promo.id && "border-black bg-black text-white")}> 
+                      <div className="flex items-center justify-between gap-3">
+                        <span>{promo.name}</span>
+                        <span className="text-xs text-[var(--text-secondary)]">{promo.value}</span>
+                      </div>
+                      {comboInfo && (
+                        <p className="mt-1 text-xs text-[var(--text-secondary)]">{comboInfo.description}</p>
+                      )}
+                      <p className="mt-1 text-xs text-[var(--text-secondary)]">{promo.status === "active" ? "Đang chạy" : promo.status === "scheduled" ? "Sắp chạy" : "Kết thúc"}</p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

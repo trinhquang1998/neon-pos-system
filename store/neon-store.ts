@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { modifiersKey } from "@/lib/modifiers";
+import { comboDetails } from "@/lib/mock-data";
 import type {
   CartDiscount,
   CartItem,
@@ -582,7 +583,7 @@ export const useNeonStore = create<NeonState>()(
         } else if (promo.type === "bogo") {
           // Determine candidate items via promo.applyTo if provided
           let candidates = cart;
-          if (promo.applyTo) {
+          if (promo.applyTo && promo.applyTo.type !== "combo") {
             if (promo.applyTo.type === "category") {
               const cats = new Set(promo.applyTo.ids);
               candidates = cart.filter((c) => {
@@ -602,8 +603,75 @@ export const useNeonStore = create<NeonState>()(
         } else if (promo.type === "points") {
           // points don't reduce price directly
           discount = 0;
+        } else if (promo.type === "combo") {
+          // Combo: check applyTo.comboId to determine combo structure
+          if (!promo.applyTo || promo.applyTo.type !== "combo") {
+            // Invalid combo promo without comboId
+            return 0;
+          }
+
+          const comboId = promo.applyTo.comboId;
+          const combo = comboDetails.find((c) => c.comboId === comboId);
+          if (!combo || !("slots" in combo)) return 0;
+
+          // Validate each slot has enough items
+          let fullSets = Infinity;
+          let comboCost = 0;
+          const slotDetails: Array<{ slotIdx: number; category: string; itemsFound: number; avgPrice: number }> = [];
+
+          for (let i = 0; i < combo.slots.length; i++) {
+            const slot = combo.slots[i];
+            const slotProductIds = new Set(slot.productIds);
+            let slotQty = 0;
+            let slotTotalPrice = 0;
+            let slotItemCount = 0;
+
+            // Count items in this slot from the cart
+            cart.forEach((c) => {
+              if (slotProductIds.has(c.productId as any)) {
+                slotQty += c.quantity;
+                slotTotalPrice += c.price * c.quantity;
+                slotItemCount += c.quantity;
+              }
+            });
+
+            if (slotQty === 0) {
+              // Missing slot - combo doesn't apply
+              return 0;
+            }
+
+            // Calculate full sets for this slot (e.g., slot requires 2 items, we have 5 → 2 full sets)
+            const setsFromSlot = Math.floor(slotQty / slot.quantity);
+            fullSets = Math.min(fullSets, setsFromSlot);
+            
+            // Add average price for this slot item (price = total / quantity)
+            const avgPrice = slotItemCount > 0 ? Math.round(slotTotalPrice / slotItemCount) : 0;
+            comboCost += avgPrice * slot.quantity;
+            
+            slotDetails.push({
+              slotIdx: i,
+              category: slot.category,
+              itemsFound: slotQty,
+              avgPrice,
+            });
+          }
+
+          if (fullSets > 0 && fullSets !== Infinity) {
+            const discountPercent = Number(promo.value.replace("%", "")) || (combo.discount || 0);
+            discount = Math.round((comboCost * fullSets * discountPercent) / 100);
+            
+            // Store combo info in cartDiscount name for UI
+            set({
+              cartDiscount: {
+                type: "fixed",
+                name: `${promo.name} (${fullSets} set${fullSets > 1 ? "s" : ""})`,
+                value: discount,
+              },
+            });
+            return discount;
+          }
         } else {
-          // combo/other: give one cheapest item free for each full combo set
+          // Fallback: generic combo/other logic - give one cheapest item free for each full combo set
           // determine distinct product ids and their quantities
           const byProduct: Record<string, { qty: number; price: number }> = {};
           cart.forEach((c) => {
