@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { ModifierForm } from "@/components/staff/modifier-form";
+import { ComboModifierForm } from "@/components/staff/combo-modifier-form";
 import { useNeonStore } from "@/store/neon-store";
+import { comboDetails } from "@/lib/mock-data";
 
 function Content() {
   const router = useRouter();
@@ -21,7 +23,30 @@ function Content() {
     );
   }
 
-  return (
+  const isCombo = product.category === "combo";
+
+  return isCombo ? (
+    <ComboModifierForm
+      product={product}
+      allProducts={products}
+      onCancel={() => router.push("/staff/pos")}
+      onAdd={({ quantity, comboItems, price, modifierLabels }) => {
+        const comboDetail = comboDetails.find((c) => c.comboId === product.id);
+        addToCart({
+          productId: product.id,
+          name: product.name,
+          basePrice: product.price,
+          price,
+          quantity,
+          modifiers: {
+            note: `Combo: ${comboItems.map((item) => item.name).join(" + ")}`,
+          },
+          modifierLabels,
+        });
+        router.push("/staff/pos");
+      }}
+    />
+  ) : (
     <ModifierForm
       product={product}
       onCancel={() => router.push("/staff/pos")}

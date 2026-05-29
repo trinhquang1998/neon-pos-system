@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Printer } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useNeonStore } from "@/store/neon-store";
+import { PrintBill } from "@/components/staff/print-bill";
 
 const methods = [
   { id: "cash", label: "Tiền mặt" },
@@ -37,6 +39,8 @@ export default function PaymentPage() {
   const [amountGiven, setAmountGiven] = useState("");
   const [splitEqual, setSplitEqual] = useState(false);
   const [error, setError] = useState("");
+  const [showBillPreview, setShowBillPreview] = useState(false);
+  const billRef = useRef<HTMLDivElement>(null);
 
   const given = Number(amountGiven) || 0;
   const change = Math.max(0, given - total);
@@ -61,7 +65,8 @@ export default function PaymentPage() {
       setError(res.error ?? "Lỗi");
       return;
     }
-    router.push("/staff/kitchen");
+    // Show bill preview before kitchen
+    setShowBillPreview(true);
   }
 
   function splitEvenly() {
@@ -71,8 +76,63 @@ export default function PaymentPage() {
     addSplitLine({ method: "card", amount: total - half });
   }
 
+  function handlePrint() {
+    if (billRef.current) {
+      const printWindow = window.open("", "", "height=600,width=400");
+      if (printWindow) {
+        printWindow.document.write("<html><head><title>Hóa đơn</title>");
+        printWindow.document.write("<style>");
+        printWindow.document.write("body { font-family: monospace; margin: 0; padding: 0; }");
+        printWindow.document.write("@media print { body { margin: 0; } }");
+        printWindow.document.write("</style></head><body>");
+        printWindow.document.write(billRef.current.innerHTML);
+        printWindow.document.write("</body></html>");
+        printWindow.document.close();
+        printWindow.print();
+        // Navigate to kitchen after printing
+        setTimeout(() => router.push("/staff/kitchen"), 500);
+      }
+    }
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {showBillPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-lg">
+            <div ref={billRef}>
+              <PrintBill
+                items={cart}
+                subtotal={subtotal}
+                discount={discount}
+                discountLabel={cartDiscount?.name}
+                total={total}
+                method={method}
+                pagerId={selectedPager}
+                orderId={`POS-${Date.now()}`}
+              />
+            </div>
+            <div className="flex gap-2 p-4 border-t">
+              <button
+                type="button"
+                onClick={() => setShowBillPreview(false)}
+                className="flex-1 px-4 py-2 border rounded-lg"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex-1 px-4 py-2 bg-black text-white rounded-lg font-semibold flex items-center justify-center gap-2"
+              >
+                <Printer className="h-4 w-4" />
+                In hóa đơn
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="border-b px-4 py-3">
         <Link href="/staff/cart" className="text-sm text-[var(--text-secondary)]">← Giỏ hàng</Link>
         <h1 className="text-xl font-bold">Thanh toán</h1>
